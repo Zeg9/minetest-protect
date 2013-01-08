@@ -221,6 +221,14 @@ minetest.register_craftitem(protector.item, {
 })
 
 minetest.register_craft({
+	output = protector.node,
+	recipe = {
+		{"default:stone","default:stone","default:stone"},
+		{"default:stone","default:steel_ingot","default:stone"},
+		{"default:stone","default:stone","default:stone"},
+	}
+})
+minetest.register_craft({
 	output = protector.item,
 	recipe = {
 		{protector.node},
