@@ -11,6 +11,8 @@
 	return false
 end]]
 
+minetest.register_privilege("delprotect","Delete other's protection by sneaking")
+
 protector = {}
 
 protector.node = "protector:protect"
@@ -97,6 +99,9 @@ protector.generate_formspec = function (meta)
 end
 
 protector.can_dig = function(r,pos,digger,onlyowner)
+		if minetest.get_player_privs(digger:get_player_name()).delprotect
+		and digger:get_player_control().sneak
+		then return true end
 	local ok=true
 	for ix = pos.x-r,pos.x+r do
 		for iy = pos.y-r,pos.y+r do
