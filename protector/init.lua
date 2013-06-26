@@ -172,12 +172,26 @@ minetest.register_node(protector.node, {
 		meta:set_string("infotext", "Protection (owned by "..
 				meta:get_string("owner")..")")
 		meta:set_string("members", "")
-		meta:set_string("formspec",protector.generate_formspec(meta))
+		--meta:set_string("formspec",protector.generate_formspec(meta))
 	end,
-	on_receive_fields = function(pos,formname,fields,sender)
+	on_rightclick = function(pos, node, clicker, itemstack)
+		local meta = minetest.env:get_meta(pos)
+		if clicker:get_player_name() == meta:get_string("owner") then
+			minetest.show_formspec(
+				clicker:get_player_name(),
+				"protector_"..minetest.pos_to_string(pos),
+				protector.generate_formspec(meta)
+			)
+		end
+	end,
+})
+minetest.register_on_player_receive_fields(function(player,formname,fields)
+	if string.sub(formname,0,string.len("protector_")) == "protector_" then
+		local pos_s = string.sub(formname,string.len("protector_")+1)
+		local pos = minetest.string_to_pos(pos_s)
 		local meta = minetest.env:get_meta(pos)
 		if meta:get_int("page") == nil then meta:set_int("page",0) end
-		if sender:get_player_name() == meta:get_string("owner") then
+		if player:get_player_name() == meta:get_string("owner") then
 			if fields.add_member then
 				for _, i in ipairs(fields.add_member:split(" ")) do
 					protector.add_member(meta,i)
@@ -192,10 +206,13 @@ minetest.register_node(protector.node, {
 			if fields.page_next then
 				meta:set_int("page",meta:get_int("page")+1)
 			end
+			minetest.show_formspec(
+				player:get_player_name(), formname,
+				protector.generate_formspec(meta)
+			)
 		end
-		meta:set_string("formspec",protector.generate_formspec(meta))
-	end,
-})
+	end
+end)
 
 minetest.register_craftitem(protector.item, {
 	description = "Protection tool",
