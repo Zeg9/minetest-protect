@@ -88,34 +88,52 @@ protector.generate_formspec = function (meta)
 	return formspec
 end
 
-protector.can_dig = function(r,pos,digger,onlyowner)
+-- r: radius to check for protects
+-- Infolevel:
+-- * 0 for no info
+-- * 1 for "This area is owned by <owner> !" if you can't dig
+-- * 2 for "This area is owned by <owner>.
+--   Members are: <members>.", even if you can dig
+protector.can_dig = function(r,pos,digger,onlyowner,infolevel)
+	if infolevel == nil then infolevel = 1 end
 	if not digger or not digger.get_player_name then return false end
-		if minetest.get_player_privs(digger:get_player_name()).delprotect
-		and digger:get_player_control().sneak
-		then return true end
-	local ok=true
-	for ix = pos.x-r,pos.x+r do
-		for iy = pos.y-r,pos.y+r do
-			for iz = pos.z-r,pos.z+r do
-				local node_name = minetest.env:get_node({x=ix,y=iy,z=iz})
-				if node_name.name == protector.node then
-					local meta = minetest.env:get_meta({x=ix,y=iy,z=iz})
-					if digger ~= nil then
-						local owner = (meta:get_string("owner"))
-							if owner ~= digger:get_player_name() then 
-								ok=false
-								if not onlyowner and protector.is_member(meta, digger:get_player_name()) then
-									ok=true
-								end
-								if not ok then
-									minetest.chat_send_player(digger:get_player_name(), "This area is owned by "..owner.." !")
-									return false
-								end
-							end
-						end			
+	-- Delprotect privileged users can override protections by holding sneak
+	if minetest.get_player_privs(digger:get_player_name()).delprotect and
+	   digger:get_player_control().sneak then
+		return true end
+	-- Find the protector nodes
+	local positions = minetest.find_nodes_in_area(
+		{x=pos.x-r, y=pos.y-r, z=pos.z-r},
+		{x=pos.x+r, y=pos.y+r, z=pos.z+r},
+		protector.node)
+	for _, pos in ipairs(positions) do
+		local meta = minetest.env:get_meta(pos)
+		local owner = meta:get_string("owner")
+		if owner ~= digger:get_player_name() then 
+			if onlyowner or not protector.is_member(meta, digger:get_player_name()) then
+				if infolevel == 1 then
+					minetest.chat_send_player(digger:get_player_name(), "This area is owned by "..owner.." !")
+				elseif infolevel == 2 then
+					minetest.chat_send_player(digger:get_player_name(),"This area is owned by "..meta:get_string("owner")..".")
+					if meta:get_string("members") ~= "" then
+						minetest.chat_send_player(digger:get_player_name(),"Members are: "..meta:get_string("members")..".")
+					end
 				end
+				return false
 			end
 		end
+	end
+	if infolevel == 2 then
+		if #positions < 1 then
+			minetest.chat_send_player(digger:get_player_name(),"This area is not protected.")
+		else
+			local meta = minetest.env:get_meta(positions[1])
+			minetest.chat_send_player(digger:get_player_name(),"This area is owned by "..meta:get_string("owner")..".")
+			if meta:get_string("members") ~= "" then
+				minetest.chat_send_player(digger:get_player_name(),"Members are: "..meta:get_string("members")..".")
+			end
+		end
+		minetest.chat_send_player(digger:get_player_name(),"You can build here.")
 	end
 	return true
 end
@@ -232,24 +250,7 @@ minetest.register_craftitem(protector.item, {
 		if pointed_thing.type ~= "node" then
 			return
 		end
-		pos = pointed_thing.under
-		r = 5
-		for ix = pos.x-r,pos.x+r do
-			for iy = pos.y-r,pos.y+r do
-				for iz = pos.z-r,pos.z+r do
-					local node_name = minetest.env:get_node({x=ix,y=iy,z=iz})
-					if node_name.name == protector.node then
-						local meta = minetest.env:get_meta({x=ix,y=iy,z=iz})
-						minetest.chat_send_player(user:get_player_name(),"This area is owned by "..meta:get_string("owner")..".")
-						if meta:get_string("members") ~= "" then
-							minetest.chat_send_player(user:get_player_name(),"Members are: "..meta:get_string("members")..".")
-						end
-						return
-					end
-				end
-			end
-		end
-		minetest.chat_send_player(user:get_player_name(),"This area is not protected.")
+		protector.can_dig(5,pointed_thing.under,user,false,2)
 	end,
 })
 
