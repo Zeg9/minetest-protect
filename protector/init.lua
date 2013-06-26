@@ -3,7 +3,9 @@
 -- Released under WTFPL
 
 
--- TODO use a mesh instead of the buggy wielditem, for protector:display
+-- FIXME: use a mesh instead of the buggy wielditem, for protector:display
+-- but that isn't possible yet since models won't take care of the texture's alpha channel...
+
 
 minetest.register_privilege("delprotect","Delete other's protection by sneaking")
 
@@ -60,31 +62,34 @@ protector.generate_formspec = function (meta)
 	formspec = "size[8,8]"
 		.."label[0,0;-- Protector interface --]"
 		.."label[0,.5;Punch the node to show the protected area.]"
-		.."label[0,1;Add a member:]"
-		.."field[3,1.33;2,1;protector_add_member;;]"
-		.."button[5,1;1,1;protector_submit;Ok]"
-		.."label[0,2;Members (click to remove):]"
+		.."label[0,2;Current members:]"
 	members = protector.get_member_list(meta)
 	
-	s = 0
-	i = 0
+	local npp = 15 -- names per page, for the moment is 4*4 (-1 for the + button)
+	local s = 0
+	local i = 0
 	for _, member in ipairs(members) do
-		if s < meta:get_int("page")*16 then s = s +1 else
-			if i < 16 then
+		if s < meta:get_int("page")*15 then s = s +1 else
+			if i < 15 then
 				formspec = formspec .. "button["..(i%4*2)..","..math.floor(i/4+3)..";1.5,.5;protector_member;"..member.."]"
 				formspec = formspec .. "button["..(i%4*2+1.25)..","..math.floor(i/4+3)..";.75,.5;protector_del_member_"..member..";X]"
 			end
 			i = i +1
 		end
 	end
+	local add_i = i
+	if add_i > npp then add_i = npp end
+	formspec = formspec
+		.."field["..(add_i%4*2+1/3)..","..(math.floor(add_i/4+3)+1/3)..";1.433,.5;protector_add_member;;]"
+		.."button["..(add_i%4*2+1.25)..","..math.floor(add_i/4+3)..";.75,.5;protector_submit;+]"
 	
 	if s > 0 then
 		formspec = formspec .. "button[0,7;1,1;protector_page_prev;<<]"
 	end
-	if i > 16 then
+	if i > npp then
 		formspec = formspec .. "button[1,7;1,1;protector_page_next;>>]"
 	end
-	formspec = formspec .. "label[2,7;Page "..(meta:get_int("page")+1).."/"..math.floor((s+i-1)/16+1).."]"
+	formspec = formspec .. "label[2,7;Page "..(meta:get_int("page")+1).."/"..math.floor((s+i-1)/15+1).."]"
 	return formspec
 end
 
