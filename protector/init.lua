@@ -216,6 +216,16 @@ minetest.register_node(protector.node, {
 		end
 	end,
 })
+-- remove formspecs from older versions of the mod
+minetest.register_abm({
+	nodenames = {protector.node},
+	interval = 5.0,
+	chance = 1,
+	action = function(pos,...)
+		local meta = minetest.env:get_meta(pos)
+		meta:set_string("formspec","")
+	end,
+})
 minetest.register_on_player_receive_fields(function(player,formname,fields)
 	if string.sub(formname,0,string.len("protector_")) == "protector_" then
 		local pos_s = string.sub(formname,string.len("protector_")+1)
