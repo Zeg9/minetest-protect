@@ -21,7 +21,6 @@ protector.item = "protector:stick"
 protector.get_member_list = function(meta)
 	s = meta:get_string("members")
 	list = s:split(" ")
-	print(dump(list))
 	return list
 end
 
@@ -31,7 +30,6 @@ protector.set_member_list = function(meta, list)
 		s = s .. i .. " "
 	end
 	s = s:sub(0,s:len()-1) -- remove last space
-	print ("Members: " .. s .. ";")
 	meta:set_string("members",s)
 end
 
@@ -68,8 +66,8 @@ protector.generate_formspec = function (meta)
 	formspec = "size[8,8]"
 	formspec = formspec .. "label[0,0;Protection owned by "..meta:get_string("owner")..".]"
 		.."label[0,1;Add a member:]"
-		.."field[3,1.33;2,1;add_member;;]"
-		.."button[5,1;1,1;submit;Ok]"
+		.."field[3,1.33;2,1;protector_add_member;;]"
+		.."button[5,1;1,1;protector_submit;Ok]"
 		.."label[0,2;Members (click to remove):]"
 	members = protector.get_member_list(meta)
 	
@@ -78,23 +76,20 @@ protector.generate_formspec = function (meta)
 	for _, member in ipairs(members) do
 		if s < meta:get_int("page")*16 then s = s +1 else
 			if i < 16 then
-				formspec = formspec .. "button["..(i%4*2)..","..math.floor(i/4+3)..";2,.5;del_member;"..member.."]"
+				formspec = formspec .. "button["..(i%4*2)..","..math.floor(i/4+3)..";1.5,.5;protector_member;"..member.."]"
+				formspec = formspec .. "button["..(i%4*2+1.25)..","..math.floor(i/4+3)..";.75,.5;protector_del_member_"..member..";X]"
 			end
 			i = i +1
 		end
 	end
 	
 	if s > 0 then
-		formspec = formspec .. "button[0,7;1,1;page_prev;<<]"
-	else
-		formspec = formspec .. "button[0,7;1,1;;<<]"
+		formspec = formspec .. "button[0,7;1,1;protector_page_prev;<<]"
 	end
 	if i > 16 then
-		formspec = formspec .. "button[7,7;1,1;page_next;>>]"
-	else
-		formspec = formspec .. "button[7,7;1,1;;>>]"
+		formspec = formspec .. "button[1,7;1,1;protector_page_next;>>]"
 	end
-	formspec = formspec .. "label[3,7;Page "..(meta:get_int("page")+1).."/"..math.floor((s+i-1)/16+1).."]"
+	formspec = formspec .. "label[2,7;Page "..(meta:get_int("page")+1).."/"..math.floor((s+i-1)/16+1).."]"
 	return formspec
 end
 
@@ -192,18 +187,20 @@ minetest.register_on_player_receive_fields(function(player,formname,fields)
 		local meta = minetest.env:get_meta(pos)
 		if meta:get_int("page") == nil then meta:set_int("page",0) end
 		if player:get_player_name() == meta:get_string("owner") then
-			if fields.add_member then
-				for _, i in ipairs(fields.add_member:split(" ")) do
+			if fields.protector_add_member then
+				for _, i in ipairs(fields.protector_add_member:split(" ")) do
 					protector.add_member(meta,i)
 				end
 			end
-			if fields.del_member then
-				protector.del_member(meta, fields.del_member)
+			for field, value in pairs(fields) do
+				if string.sub(field,0,string.len("protector_del_member_"))=="protector_del_member_" then
+					protector.del_member(meta, string.sub(field,string.len("protector_del_member_")+1))
+				end
 			end
-			if fields.page_prev then
+			if fields.protector_page_prev then
 				meta:set_int("page",meta:get_int("page")-1)
 			end
-			if fields.page_next then
+			if fields.protector_page_next then
 				meta:set_int("page",meta:get_int("page")+1)
 			end
 			minetest.show_formspec(
