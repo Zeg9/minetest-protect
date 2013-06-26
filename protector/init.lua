@@ -2,14 +2,8 @@
 -- based on glomie's mod of the same name
 -- Released under WTFPL
 
---[[table.contains = function(list, what)
-	for _, i in ipairs(list) do
-		if i == what then
-			return true
-		end
-	end
-	return false
-end]]
+
+-- TODO use a mesh instead of the buggy wielditem, for protector:display
 
 minetest.register_privilege("delprotect","Delete other's protection by sneaking")
 
@@ -64,7 +58,8 @@ end
 protector.generate_formspec = function (meta)
 	if meta:get_int("page") == nil then meta:set_int("page",0) end
 	formspec = "size[8,8]"
-	formspec = formspec .. "label[0,0;Protection owned by "..meta:get_string("owner")..".]"
+		.."label[0,0;-- Protector interface --]"
+		.."label[0,.5;Punch the node to show the protected area.]"
 		.."label[0,1;Add a member:]"
 		.."field[3,1.33;2,1;protector_add_member;;]"
 		.."button[5,1;1,1;protector_submit;Ok]"
@@ -94,6 +89,7 @@ protector.generate_formspec = function (meta)
 end
 
 protector.can_dig = function(r,pos,digger,onlyowner)
+	if not digger or not digger.get_player_name then return false end
 		if minetest.get_player_privs(digger:get_player_name()).delprotect
 		and digger:get_player_control().sneak
 		then return true end
@@ -105,7 +101,7 @@ protector.can_dig = function(r,pos,digger,onlyowner)
 				if node_name.name == protector.node then
 					local meta = minetest.env:get_meta({x=ix,y=iy,z=iz})
 					if digger ~= nil then
-						local owner = (meta:get_string("owner"))					
+						local owner = (meta:get_string("owner"))
 							if owner ~= digger:get_player_name() then 
 								ok=false
 								if not onlyowner and protector.is_member(meta, digger:get_player_name()) then
@@ -161,6 +157,7 @@ minetest.register_node(protector.node, {
 	tile_images = {"protector_top.png","protector_top.png","protector_side.png"},
 	sounds = default.node_sound_stone_defaults(),
 	groups = {dig_immediate=2},
+	paramtype = "light",
 	after_place_node = function(pos, placer)
 		local meta = minetest.env:get_meta(pos)
 		meta:set_string("owner", placer:get_player_name() or "")
@@ -171,12 +168,28 @@ minetest.register_node(protector.node, {
 	end,
 	on_rightclick = function(pos, node, clicker, itemstack)
 		local meta = minetest.env:get_meta(pos)
-		if clicker:get_player_name() == meta:get_string("owner") then
+		if protector.can_dig(1,pos,clicker,true) then
 			minetest.show_formspec(
 				clicker:get_player_name(),
 				"protector_"..minetest.pos_to_string(pos),
 				protector.generate_formspec(meta)
 			)
+		end
+	end,
+	on_punch = function(pos, node, puncher)
+		if not protector.can_dig(1,pos,puncher,true) then
+			return
+		end
+		local objs = minetest.env:get_objects_inside_radius(pos,.5) -- a radius of .5 since the entity serialization seems to be not that precise
+		local removed = false
+		for _, o in pairs(objs) do
+			if (not o:is_player()) and o:get_luaentity().name == "protector:display" then
+				o:remove()
+				removed = true
+			end
+		end
+		if not removed then -- nothing was removed: there wasn't the entity
+			minetest.env:add_entity(pos, "protector:display")
 		end
 	end,
 })
@@ -186,28 +199,29 @@ minetest.register_on_player_receive_fields(function(player,formname,fields)
 		local pos = minetest.string_to_pos(pos_s)
 		local meta = minetest.env:get_meta(pos)
 		if meta:get_int("page") == nil then meta:set_int("page",0) end
-		if player:get_player_name() == meta:get_string("owner") then
-			if fields.protector_add_member then
-				for _, i in ipairs(fields.protector_add_member:split(" ")) do
-					protector.add_member(meta,i)
-				end
-			end
-			for field, value in pairs(fields) do
-				if string.sub(field,0,string.len("protector_del_member_"))=="protector_del_member_" then
-					protector.del_member(meta, string.sub(field,string.len("protector_del_member_")+1))
-				end
-			end
-			if fields.protector_page_prev then
-				meta:set_int("page",meta:get_int("page")-1)
-			end
-			if fields.protector_page_next then
-				meta:set_int("page",meta:get_int("page")+1)
-			end
-			minetest.show_formspec(
-				player:get_player_name(), formname,
-				protector.generate_formspec(meta)
-			)
+		if not protector.can_dig(1,pos,player,true) then
+			return
 		end
+		if fields.protector_add_member then
+			for _, i in ipairs(fields.protector_add_member:split(" ")) do
+				protector.add_member(meta,i)
+			end
+		end
+		for field, value in pairs(fields) do
+			if string.sub(field,0,string.len("protector_del_member_"))=="protector_del_member_" then
+				protector.del_member(meta, string.sub(field,string.len("protector_del_member_")+1))
+			end
+		end
+		if fields.protector_page_prev then
+			meta:set_int("page",meta:get_int("page")-1)
+		end
+		if fields.protector_page_next then
+			meta:set_int("page",meta:get_int("page")+1)
+		end
+		minetest.show_formspec(
+			player:get_player_name(), formname,
+			protector.generate_formspec(meta)
+		)
 	end
 end)
 
@@ -254,4 +268,51 @@ minetest.register_craft({
 		{'default:stick'},
 	}
 })
+
+minetest.register_entity("protector:display", {
+	physical = false,
+	collisionbox = {0,0,0,0,0,0},
+	visual = "wielditem",
+	visual_size = {x=1.0/1.5,y=1.0/1.5}, -- wielditem seems to be scaled to 1.5 times original node size
+	textures = {"protector:display_node"},
+	on_step = function(self, dtime)
+		if minetest.get_node(self.object:getpos()).name ~= protector.node then
+			self.object:remove()
+			return
+		end
+	end,
+})
+
+-- Display-zone node.
+-- Do NOT place the display as a node
+-- it is made to be used as an entity (see above)
+minetest.register_node("protector:display_node", {
+	tiles = {"protector_display.png"},
+	use_texture_alpha = true,
+	walkable = false,
+	drawtype = "nodebox",
+	node_box = {
+		type = "fixed",
+		fixed = {
+			-- sides
+			{-5.55, -5.55, -5.55, -5.45, 5.55, 5.55},
+			{-5.55, -5.55, 5.45, 5.55, 5.55, 5.55},
+			{5.45, -5.55, -5.55, 5.55, 5.55, 5.55},
+			{-5.55, -5.55, -5.55, 5.55, 5.55, -5.45},
+			-- top
+			{-5.55, 5.45, -5.55, 5.55, 5.55, 5.55},
+			-- bottom
+			{-5.55, -5.55, -5.55, 5.55, -5.45, 5.55},
+			-- middle (surround protector)
+			{-.55,-.55,-.55, .55,.55,.55},
+		},
+	},
+	selection_box = {
+		type = "regular",
+	},
+	paramtype = "light",
+	groups = {dig_immediate=3,not_in_creative_inventory=1},
+	drop = "",
+})
+
 
