@@ -180,6 +180,12 @@ minetest.register_node(protector.node, {
 	tile_images = {"protector_top.png","protector_top.png","protector_side.png"},
 	sounds = default.node_sound_stone_defaults(),
 	groups = {dig_immediate=2},
+	drawtype = "nodebox",
+	node_box = {
+		type="fixed",
+		fixed = { -0.5, -0.5, -0.5, 0.5, 0.5, 0.5 },
+	},
+	selection_box = { type="regular" },
 	paramtype = "light",
 	after_place_node = function(pos, placer)
 		local meta = minetest.env:get_meta(pos)
