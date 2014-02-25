@@ -15,22 +15,17 @@ protector.node = "protector:protect"
 protector.item = "protector:stick"
 
 protector.get_member_list = function(meta)
-	s = meta:get_string("members")
-	list = s:split(" ")
+	local s = meta:get_string("members")
+	local list = s:split(" ")
 	return list
 end
 
 protector.set_member_list = function(meta, list)
-	s = ""
-	for _, i in ipairs(list) do
-		s = s .. i .. " "
-	end
-	s = s:sub(0,s:len()-1) -- remove last space
-	meta:set_string("members",s)
+	meta:set_string("members", table.concat(list, " "))
 end
 
 protector.is_member = function (meta, name)
-	list = protector.get_member_list(meta)
+	local list = protector.get_member_list(meta)
 	for _, n in ipairs(list) do
 		if n == name then
 			return true
@@ -41,13 +36,13 @@ end
 
 protector.add_member = function(meta, name)
 	if protector.is_member(meta, name) then return end
-	list = protector.get_member_list(meta)
+	local list = protector.get_member_list(meta)
 	table.insert(list,name)
 	protector.set_member_list(meta,list)
 end
 
 protector.del_member = function(meta,name)
-	list = protector.get_member_list(meta)
+	local list = protector.get_member_list(meta)
 	for i, n in ipairs(list) do
 		if n == name then
 			table.remove(list, i)
@@ -59,7 +54,7 @@ end
 
 protector.generate_formspec = function (meta)
 	if meta:get_int("page") == nil then meta:set_int("page",0) end
-	formspec = "size[8,8]"
+	local formspec = "size[8,8]"
 		.."label[0,0;-- Protector interface --]"
 		.."label[0,1;Punch the node to show the protected area.]"
 		.."label[0,2;Current members:]"
@@ -147,8 +142,9 @@ local old_node_dig = minetest.node_dig
 function minetest.node_dig(pos, node, digger)
 	local ok=true
 	if node.name ~= protector.node then
-	ok = protector.can_dig(5,pos,digger)
-	else ok = protector.can_dig(5,pos,digger,true)
+		ok = protector.can_dig(5,pos,digger)
+	else
+		ok = protector.can_dig(5,pos,digger,true)
 	end
 	if ok == true then
 		old_node_dig(pos, node, digger)
@@ -174,12 +170,18 @@ function minetest.item_place(itemstack, placer, pointed_thing)
 	end	
 	return old_node_place(itemstack, placer, pointed_thing)
 end
-protect = {}
+local protect = {}
 minetest.register_node(protector.node, {
 	description = "Protection",
-	tile_images = {"protector_top.png","protector_top.png","protector_side.png"},
+	tiles = {"protector_top.png","protector_top.png","protector_side.png"},
 	sounds = default.node_sound_stone_defaults(),
 	groups = {dig_immediate=2},
+	drawtype = "nodebox",
+	node_box = {
+		type="fixed",
+		fixed = { -0.5, -0.5, -0.5, 0.5, 0.5, 0.5 },
+	},
+	selection_box = { type="regular" },
 	paramtype = "light",
 	after_place_node = function(pos, placer)
 		local meta = minetest.env:get_meta(pos)
