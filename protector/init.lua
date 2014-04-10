@@ -13,6 +13,7 @@ protector = {}
 
 protector.node = "protector:protect"
 protector.item = "protector:stick"
+protector.radius = 5 --Radius of protection
 
 protector.get_member_list = function(meta)
 	local s = meta:get_string("members")
@@ -36,6 +37,8 @@ end
 
 protector.add_member = function(meta, name)
 	if protector.is_member(meta, name) then return end
+	--Do not add unknown people
+	if not minetest.auth_table[name] then return end
 	local list = protector.get_member_list(meta)
 	table.insert(list,name)
 	protector.set_member_list(meta,list)
@@ -54,7 +57,8 @@ end
 
 protector.generate_formspec = function (meta)
 	if meta:get_int("page") == nil then meta:set_int("page",0) end
-	local formspec = "size[8,8]"
+	-- more space
+	local formspec = "size[10,8]"
 		.."label[0,0;-- Protector interface --]"
 		.."label[0,1;Punch the node to show the protected area.]"
 		.."label[0,2;Current members:]"
@@ -64,20 +68,21 @@ protector.generate_formspec = function (meta)
 	local s = 0
 	local i = 0
 	for _, member in ipairs(members) do
-		if s < meta:get_int("page")*15 then s = s +1 else
-			if i < 15 then
-				formspec = formspec .. "button["..(i%4*2)..","..math.floor(i/4+3)..";1.5,.5;protector_member;"..member.."]"
-				formspec = formspec .. "button["..(i%4*2+1.25)..","..math.floor(i/4+3)..";.75,.5;protector_del_member_"..member..";X]"
+		if s < meta:get_int("page")*npp then s = s + 1 else
+			if i < npp + 1 then
+				formspec = formspec .. "button["..(i%4*2.5)..","..math.floor(i/4+3)..";2,.5;protector_member;"..member.."]"
+				formspec = formspec .. "button["..(i%4*2.5+1.75)..","..math.floor(i/4+3)..";.75,.5;protector_del_member_"..member..";X]"
 			end
-			i = i +1
+			i = i + 1
 		end
 	end
 	local add_i = i
 	if add_i > npp then add_i = npp end
-	formspec = formspec
-		.."field["..(add_i%4*2+1/3)..","..(math.floor(add_i/4+3)+1/3)..";1.433,.5;protector_add_member;;]"
-		.."button["..(add_i%4*2+1.25)..","..math.floor(add_i/4+3)..";.75,.5;protector_submit;+]"
-	
+	if i <= npp then
+		formspec = formspec
+			.."field["..(add_i%4*2.5+1/3)..","..(math.floor(add_i/4+3)+1/3)..";1.95,.5;protector_add_member;;]"
+			.."button["..(add_i%4*2.5+1.75)..","..math.floor(add_i/4+3)..";.75,.5;protector_submit;+]"
+	end
 	if s > 0 then
 		formspec = formspec .. "button[0,7;1,1;protector_page_prev;<<]"
 	end
@@ -107,7 +112,7 @@ protector.can_dig = function(r,pos,digger,onlyowner,infolevel)
 		{x=pos.x+r, y=pos.y+r, z=pos.z+r},
 		protector.node)
 	for _, pos in ipairs(positions) do
-		local meta = minetest.env:get_meta(pos)
+		local meta = minetest.get_meta(pos)
 		local owner = meta:get_string("owner")
 		if owner ~= digger:get_player_name() then 
 			if onlyowner or not protector.is_member(meta, digger:get_player_name()) then
@@ -127,7 +132,7 @@ protector.can_dig = function(r,pos,digger,onlyowner,infolevel)
 		if #positions < 1 then
 			minetest.chat_send_player(digger:get_player_name(),"This area is not protected.")
 		else
-			local meta = minetest.env:get_meta(positions[1])
+			local meta = minetest.get_meta(positions[1])
 			minetest.chat_send_player(digger:get_player_name(),"This area is owned by "..meta:get_string("owner")..".")
 			if meta:get_string("members") ~= "" then
 				minetest.chat_send_player(digger:get_player_name(),"Members are: "..meta:get_string("members")..".")
@@ -138,16 +143,14 @@ protector.can_dig = function(r,pos,digger,onlyowner,infolevel)
 	return true
 end
 
-local old_node_dig = minetest.node_dig
-function minetest.node_dig(pos, node, digger)
-	local ok=true
-	if node.name ~= protector.node then
-		ok = protector.can_dig(5,pos,digger)
+local old_is_protected = minetest.is_protected
+function minetest.is_protected (pos, name)
+	local node = minetest.get_node(pos).name
+	local only_owner = (node == protector.node)
+	if protector.can_dig(protector.radius, pos, minetest.get_player_by_name(name), only_owner) then
+		return old_is_protected(pos, name)
 	else
-		ok = protector.can_dig(5,pos,digger,true)
-	end
-	if ok == true then
-		old_node_dig(pos, node, digger)
+		return true
 	end
 end
 
@@ -157,10 +160,10 @@ function minetest.item_place(itemstack, placer, pointed_thing)
 		local ok=true
 		if itemstack:get_name() ~= protector.node then
 			local pos = pointed_thing.above
-			ok = protector.can_dig(5,pos,placer)
+			ok = protector.can_dig(protector.radius,pos,placer)
 		else
 			local pos = pointed_thing.above
-			ok = protector.can_dig(10,pos,placer,true)
+			ok = protector.can_dig(protector.radius*2,pos,placer,true)
 		end 
 		if ok == true then
 			return old_node_place(itemstack, placer, pointed_thing)
@@ -176,15 +179,8 @@ minetest.register_node(protector.node, {
 	tiles = {"protector_top.png","protector_top.png","protector_side.png"},
 	sounds = default.node_sound_stone_defaults(),
 	groups = {dig_immediate=2},
-	drawtype = "nodebox",
-	node_box = {
-		type="fixed",
-		fixed = { -0.5, -0.5, -0.5, 0.5, 0.5, 0.5 },
-	},
-	selection_box = { type="regular" },
-	paramtype = "light",
 	after_place_node = function(pos, placer)
-		local meta = minetest.env:get_meta(pos)
+		local meta = minetest.get_meta(pos)
 		meta:set_string("owner", placer:get_player_name() or "")
 		meta:set_string("infotext", "Protection (owned by "..
 				meta:get_string("owner")..")")
@@ -192,7 +188,7 @@ minetest.register_node(protector.node, {
 		--meta:set_string("formspec",protector.generate_formspec(meta))
 	end,
 	on_rightclick = function(pos, node, clicker, itemstack)
-		local meta = minetest.env:get_meta(pos)
+		local meta = minetest.get_meta(pos)
 		if protector.can_dig(1,pos,clicker,true) then
 			minetest.show_formspec(
 				clicker:get_player_name(),
@@ -205,7 +201,7 @@ minetest.register_node(protector.node, {
 		if not protector.can_dig(1,pos,puncher,true) then
 			return
 		end
-		local objs = minetest.env:get_objects_inside_radius(pos,.5) -- a radius of .5 since the entity serialization seems to be not that precise
+		local objs = minetest.get_objects_inside_radius(pos,.5) -- a radius of .5 since the entity serialization seems to be not that precise
 		local removed = false
 		for _, o in pairs(objs) do
 			if (not o:is_player()) and o:get_luaentity().name == "protector:display" then
@@ -214,7 +210,7 @@ minetest.register_node(protector.node, {
 			end
 		end
 		if not removed then -- nothing was removed: there wasn't the entity
-			minetest.env:add_entity(pos, "protector:display")
+			minetest.add_entity(pos, "protector:display")
 		end
 	end,
 })
@@ -224,15 +220,16 @@ minetest.register_abm({
 	interval = 5.0,
 	chance = 1,
 	action = function(pos,...)
-		local meta = minetest.env:get_meta(pos)
+		local meta = minetest.get_meta(pos)
 		meta:set_string("formspec","")
 	end,
 })
 minetest.register_on_player_receive_fields(function(player,formname,fields)
 	if string.sub(formname,0,string.len("protector_")) == "protector_" then
+		if fields.quit then return end
 		local pos_s = string.sub(formname,string.len("protector_")+1)
 		local pos = minetest.string_to_pos(pos_s)
-		local meta = minetest.env:get_meta(pos)
+		local meta = minetest.get_meta(pos)
 		if meta:get_int("page") == nil then meta:set_int("page",0) end
 		if not protector.can_dig(1,pos,player,true) then
 			return
@@ -267,7 +264,7 @@ minetest.register_craftitem(protector.item, {
 		if pointed_thing.type ~= "node" then
 			return
 		end
-		protector.can_dig(5,pointed_thing.under,user,false,2)
+		protector.can_dig(protector.radius,pointed_thing.under,user,false,2)
 	end,
 })
 
@@ -313,14 +310,14 @@ minetest.register_node("protector:display_node", {
 		type = "fixed",
 		fixed = {
 			-- sides
-			{-5.55, -5.55, -5.55, -5.45, 5.55, 5.55},
-			{-5.55, -5.55, 5.45, 5.55, 5.55, 5.55},
-			{5.45, -5.55, -5.55, 5.55, 5.55, 5.55},
-			{-5.55, -5.55, -5.55, 5.55, 5.55, -5.45},
+			{-protector.radius-.55, -protector.radius-.55, -protector.radius-.55, -protector.radius-.45, protector.radius+.55, protector.radius+.55},
+			{-protector.radius-.55, -protector.radius-.55, protector.radius+.45, protector.radius+.55, protector.radius+.55, protector.radius+.55},
+			{protector.radius+.45, -protector.radius-.55, -protector.radius-.55, protector.radius+.55, protector.radius+.55, protector.radius+.55},
+			{-protector.radius-.55, -protector.radius-.55, -protector.radius-.55, protector.radius+.55, protector.radius+.55, -protector.radius-.45},
 			-- top
-			{-5.55, 5.45, -5.55, 5.55, 5.55, 5.55},
+			{-protector.radius-.55, protector.radius+.45, -protector.radius-.55, protector.radius+.55, protector.radius+.55, protector.radius+.55},
 			-- bottom
-			{-5.55, -5.55, -5.55, 5.55, -5.45, 5.55},
+			{-protector.radius-.55, -protector.radius-.55, -protector.radius-.55, protector.radius+.55, -protector.radius-.45, protector.radius+.55},
 			-- middle (surround protector)
 			{-.55,-.55,-.55, .55,.55,.55},
 		},
