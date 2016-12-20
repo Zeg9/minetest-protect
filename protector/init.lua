@@ -253,10 +253,12 @@ minetest.register_on_player_receive_fields(function(player,formname,fields)
 		if fields.protector_page_next then
 			meta:set_int("page",meta:get_int("page")+1)
 		end
-		minetest.show_formspec(
-			player:get_player_name(), formname,
-			protector.generate_formspec(meta)
-		)
+		if not fields.quit then
+			minetest.show_formspec(
+				player:get_player_name(), formname,
+				protector.generate_formspec(meta)
+			)
+		end
 	end
 end)
 
